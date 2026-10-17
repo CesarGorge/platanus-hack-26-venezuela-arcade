@@ -51,18 +51,17 @@ window.addEventListener('keyup', e => { const c = K2A[nk(e.key)]; if (c) held[c]
 const pfx = tm => (tm ? 'P2_' : 'P1_');
 const hd = (tm, b) => held[pfx(tm) + b];
 const pr = (tm, b) => hit[pfx(tm) + b];
-const axis = tm => [(hd(tm, 'R') ? 1 : 0) - (hd(tm, 'L') ? 1 : 0), (hd(tm, 'U') ? 1 : 0) - (hd(tm, 'D') ? 1 : 0)];
-const any = (...k) => k.some(c => hit[c]);
+const axis = tm => [(hd(tm, 'R') | 0) - (hd(tm, 'L') | 0), (hd(tm, 'U') | 0) - (hd(tm, 'D') | 0)];
+const any = (...k) => k.some(c => hit[c]), go1 = p => pr(p, '1') || hit['START' + (p + 1)];
 
 // ---------- math ----------
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const seg = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
 const eo = t => 1 - (1 - t) ** 3;
-const eio = t => (t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const rnd = (a, b) => a + random() * (b - a);
 const hyp = Math.hypot;
-function rng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+function rng(seed) { let s = seed >>> 0 || 1; return () => (s ^= s << 13, s ^= s >>> 17, s ^= s << 5, (s >>> 0) / 4294967296); }
 
 // ---------- game constants ----------
 const US = ['#e1ff00', '#ff6ec7'], UC = [0xe1ff00, 0xff6ec7], CH = '#f6ffd6', DIM = '#c7cf9a';
@@ -73,11 +72,11 @@ const cd = (p, q) => abs((p >> 16) - (q >> 16)) + abs((p >> 8 & 255) - (q >> 8 &
 function setTeams(a, b) { const o = [TEAM[a], TEAM[b]]; TI = [a, b]; [TN, TA, TL, TC, TS] = [0, 1, 2, 3, 4].map(i => o.map(t => t[i])); if (cd(TC[0], TC[1]) < 170) TC[1] = 0xf4f4fa; }
 const other = a => { let b; do b = random() * 4 | 0; while (b === a); return b; };
 setTeams(0, 1);
-const PN = ['RECTA', 'CURVA', 'CAMBIO'], CPN = ['PLANA', 'CAÍDA', 'LOCA'];
-// chapita kids: name, shirt, pants, skin, tank top, legs (1 shorts, 2 ripped pants), feet (1 cholas, 2 sneakers), head (1 cap back, 2 long hair, 3 short hair), head color, power, aim, shoe color
-const CHR = [['EL FLACO', 0xf4f4fa, 0x364fc7, 0x8d5524, 1, 0, 1, 1, 0xe03131, 2, 4, 0x2f9e44], ['LA CHAMA', 0xf783ac, 0x4dabf7, 0xc98d5f, 0, 1, 2, 2, 0x3a2418, 3, 3, 0xf4f4f4],
-  ['EL CATIRE', 0xff922b, 0x3b5a99, 0xf1c27d, 0, 2, 2, 3, 0xffd43b, 4, 2, 0x111111], ['EL PANA', 0xffd43b, 0x212529, 0x5a3410, 1, 1, 1, 1, 0xe03131, 3, 3, 0x1c7ed6]];
-const lkOf = c => ({ sh: c[1], pa: c[2], sk: c[3], Ce: c[4], Cf: c[5], ft: c[6], hd: c[7], hc: c[8], fc: c[11], br: 1 });
+const JS = 'JOYSTICK: ', PN = ['RECTA', 'CURVA', 'CAMBIO'], CPN = ['PLANA', 'CAÍDA', 'LOCA'];
+// chapita kids: name, shirt, pants, skin, tank top, legs (1 shorts, 2 ripped pants), feet (1 cholas, 2 sneakers), cap / hair color, power, aim, shoe color
+const CHR = [['EL FLACO', 0xf4f4fa, 0x364fc7, 0x8d5524, 1, 0, 1, 0xe03131, 2, 4, 0x2f9e44], ['LA CHAMA', 0xf783ac, 0x4dabf7, 0xc98d5f, 0, 1, 2, 0x3a2418, 3, 3, 0xf4f4f4],
+  ['EL CATIRE', 0xff922b, 0x3b5a99, 0xf1c27d, 0, 2, 2, 0xffd43b, 4, 2, 0x111111], ['EL PANA', 0xffd43b, 0x212529, 0x5a3410, 1, 1, 1, 0xe03131, 3, 3, 0x1c7ed6]];
+const lkOf = c => ({ sh: c[1], pa: c[2], sk: c[3], Ce: c[4], Cf: c[5], ft: c[6], hc: c[7], fc: c[10], br: 1 });
 const look = bt => G.I ? G.lk : { sh: TC[bt], pa: 0xdcdee8, sk: 0xb77a4e, hc: 0x3a4466, fc: 0x181425 };
 const MPH = [[92, 97], [76, 82], [80, 85]];
 const PT = [.66, .82, .96];                       // pitch flight time (s)
@@ -91,7 +90,6 @@ const CUT = { x: 0, y: 62 };
 // fielders: x, y (feet, home at 0,0, center field +y), speed ft/s
 const DEF = [[0, 58, 17], [0, -6, 17], [64, 92, 19], [32, 138, 19], [-32, 138, 19], [-64, 92, 19], [-150, 255, 24], [0, 300, 24], [150, 255, 24]];
 const pick = a => a[random() * a.length | 0];
-const mix = (c, k) => ((c >> 16 & 255) * k) << 16 | ((c >> 8 & 255) * k) << 8 | (c & 255) * k;
 
 // field projection (camera behind and above home plate)
 const D0 = 80, CP = 34080, FP = 483, HZ = 159;
@@ -101,9 +99,9 @@ const fenceR = ph => 400 - 70 * min(1, abs(ph) / (PI / 4)) ** 1.5;
 const zs = (x, y) => [410 + x * 48, 435 - y * 55];
 
 // ---------- state ----------
-let S, bgI, gw, gw2, gh, gx, g;
+let S, CAM, bgI, gw, gw2, gh, gx, g;
 let G = { st: 'T', Ad: 0, it: 0 }, P = null, Y = null, FW = [], MSG = null, BAN = null;
-let LBS = [[], []], FB = null, CU = { n: 'P1', u: 7 };
+let LBS = [[], []], FB = null, CU = { n: 'P1' };
 
 const config = {
   type: Phaser.AUTO,
@@ -124,8 +122,8 @@ function create() {
   mkTex('chp', chapBG);
   // everything is drawn in 800x600 coordinates through a 1/PX camera: the game renders at 400x300 and the canvas is
   // scaled up with nearest filtering, so the whole game (world, HUD, text) shares one pixel grid
-  this.cameras.main.setZoom(1 / PX).centerOn(W / 2, H / 2);
-  SHS.forEach((q, i) => (SIM[i] = new Image()).src = 'data:image/png;base64,' + q[0].split('-').join('/'));
+  CAM = this.cameras.main.setZoom(1 / PX).centerOn(W / 2, H / 2);
+  (SIM = new Image()).src = 'data:image/png;base64,' + SPI.split('-').join('/');
   bgI = this.add.image(0, 0, 'fld').setOrigin(0).setScale(PX);
   gw = this.add.graphics().setDepth(1);
   gw2 = this.add.graphics().setDepth(1.4);
@@ -138,12 +136,7 @@ function update(_, delta) {
   const dt = min(delta, 50) / 1000;
   clock += dt;
   ti = 0; gw.clear(); gw2.clear(); gh.clear(); gx.clear();
-  if (G.st === 'T') title(dt);
-  else if (G.st === 'k') pickScreen(dt);
-  else if (G.st === 'u') custScreen(dt);
-  else if (G.st === 'q') cpick(dt);
-  else if (G.st === 'v') overScreen(dt);
-  else inGame(dt);
+  ({ T: title, k: pickScreen, u: custScreen, q: cpick, v: overScreen }[G.st] || inGame)(dt);
   stepFW(dt);
   for (let i = ti; i < tp.length; i++) tp[i].setVisible(false);
   for (const k in hit) delete hit[k];
@@ -179,8 +172,8 @@ function tk(str, col, k) {
 }
 // RP snaps a position to the game pixel grid (half-pixel positions make some GPUs drop a row or column of a texture)
 const RP = v => round(v / PX) * PX, tz = (s, fs = 12) => max(1, round(fs * s / 20)), tw = (str, s) => TW[tk(String(str), CH, tz(s))] * PX;
-const TB = (t, x, y, s, c, a = 1) => T(t, x, y, s, c, .5, 0, a, 3, 24), TD = (t, x, y, s, c) => T(t, x, y, s, c);
-function T(str, x, y, s = 2, col = CH, ox = .5, sh, al = 1, dp = 3, fs) {
+const TB = (t, x, y, s, c, a = 1) => T(t, x, y, s, c, .5, a, 3, 24), TD = (t, x, y, s, c) => T(t, x, y, s, c);
+function T(str, x, y, s = 2, col = CH, ox = .5, al = 1, dp = 3, fs) {
   str = String(str);
   const k = tz(s, fs);
   const key = tk(str, col, k);
@@ -190,18 +183,18 @@ function T(str, x, y, s = 2, col = CH, ox = .5, sh, al = 1, dp = 3, fs) {
 }
 
 // ---------- graphics helpers ----------
-// OL: outline width while drawing characters (opaque shapes only); dk: 75% darker color for shading
-let OL = 0;
 // ENDESGA 32 palette plus the Platanus accents: every colour the game draws snaps to it; backgrounds are dithered to it
 const PALX = 'be4a2fd77643ead4aae4a672b86f50733e393e2731a22633e43b44f77622feae34fee76163c74d3e8948265c42193c3e124e890099db2ce8f5ffffffc0cbdc8b9bb45a69883a4466262b44181425ff004468386cb55088f6757ae8b796c28569e1ff00ff6ec7'.match(/.{6}/g).map(h => parseInt(h, 16)),
   SNP = {}, snap = c => SNP[c] ?? (SNP[c] = PALX.reduce((b, q) => cd(q, c) < cd(b, c) ? q : b)), LS = (w, c, a) => g.lineStyle(w, snap(c), a);
 // ramps: for each palette colour, its lighter and darker neighbour (hue-shifted like hand-made pixel art)
-const fc = (c, a) => g.fillStyle(snap(c), a), os = a => OL && !(a < 1) && LS(OL, 0x181425), RMP = '1530C32435465I86M7:0;9C:;=<>=?>IAHB@CACDCEDFEGFHGIHIM7L6MKNL2ON4C:ML', rp = (c, k) => PALX[RMP.charCodeAt(PALX.indexOf(snap(c)) * 2 + k) - 48], lt = c => rp(c, 0), dk = c => rp(c, 1);
+const fc = (c, a) => g.fillStyle(snap(c), a), RMP = '1530C32435465I86M7:0;9C:;=<>=?>IAHB@CACDCEDFEGFHGIHIM7L6MKNL2ON4C:ML', rp = (c, k) => PALX[RMP.charCodeAt(PALX.indexOf(snap(c)) * 2 + k) - 48], lt = c => rp(c, 0), dk = c => rp(c, 1);
 function el(x, y, rx, ry, c, a) { fc(c, a); g.fillEllipse(x, y, rx * 2, ry * 2); }
 function rc(x, y, w, h, c, a) { fc(c, a); g.fillRect(x, y, w, h); }
 function rr(x, y, w, h, r, c, a) { fc(c, a); r = min(r, w / 2, h / 2); g.fillRoundedRect(x, y, w, h, r); }
 function pl(c, a, ...p) { const v = []; for (let i = 0; i < p.length; i += 2) v.push({ x: p[i], y: p[i + 1] }); fc(c, a); g.fillPoints(v, true); }
 function ln(x1, y1, x2, y2, w, c, a = 1) { LS(w, c, a); g.lineBetween(x1, y1, x2, y2); }
+// menu screens: background k dimmed by a, plus the screen timer
+function scr(k, a, dt) { bgI.setTexture(k); g = gw; rc(0, 0, W, H, 0, a); G.it += dt; }
 function box(x, y, w, h, col = 0xe1ff00) { rr(x, y, w, h, 8, 0x04050c, .86); LS(2, col, .5); g.strokeRoundedRect(x + 1, y + 1, w - 2, h - 2, 8); }
 
 // ---------- static backgrounds (canvas 2D, drawn once) ----------
@@ -386,13 +379,8 @@ const sfx = {
 };
 
 // ---------- storage ----------
-function store() {
-  if (window.platanusArcadeStorage) return window.platanusArcadeStorage;
-  return {
-    async get(k) { try { const r = localStorage.getItem(k); return r === null ? { found: false, value: null } : { found: true, value: JSON.parse(r) }; } catch (e) { return { found: false, value: null }; } },
-    async set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } },
-  };
-}
+// storage: the arcade API, or localStorage when testing locally (errors end in the callers' catch)
+const store = () => window.platanusArcadeStorage || { get: async k => ({ value: JSON.parse(localStorage.getItem(k)) }), set: async (k, v) => localStorage.setItem(k, JSON.stringify(v)) };
 const okN = n => Number.isInteger(n) && n >= 0 && n < 1e6;
 const LKEY = ['se-fue-derby-v1', 'se-fue-chapita-v1'];
 const okE = e => e && typeof e.n === 'string' && /^[A-Z0-9 ]{1,6}$/.test(e.n) && okN(e.h) && e.h < 100 && okN(e.d) && e.d < 1000;
@@ -406,19 +394,22 @@ function saveLB(i) { Promise.resolve().then(() => store().set(LKEY[i], LBS[i])).
 const tname = tm => (tm === 0 ? 'P1' : G.J[1] ? 'P2' : 'CPU');
 function say(a, b = '', col = CH, d = 1.6) { MSG = { a, b, Al: col, t: d }; }
 
-function newGame(players) {
-  G = { st: 'p', Ad: 0, N: 4, X: 1, A: 0, B: 0, b: 0, s: 0, D: [0, 0, 0, 0], E: [0, 0], g: [[], []], Aa: [0, 0], Ab: [0, 0], J: [1, players === 2 ? 1 : 0], o: 0, ln: [0, 0], W: 0, it: 0 };
+// new game state for any mode (o: mode-specific fields)
+function mkG(o) {
+  G = { st: 'p', N: 1, X: 1, B: 0, b: 0, s: 0, D: [0, 0, 0, 0], E: [0, 0], g: [[], []], Aa: [0, 0], o: 0, W: 0, it: 0, dl: 60, e: 0, S: 0, ...o };
   lastInput = clock; amb(1);
+}
+function newGame(players) {
+  mkG({ Ad: 0, N: 4, A: 0, J: [1, players === 2 ? 1 : 0] });
   startHalf();
 }
 function newDerby(pl) {
-  G = { st: 'p', O: 1, Ad: 1, N: 1, X: 1, A: pl, B: 0, b: 0, s: 0, D: [0, 0, 0, 0], E: [0, 0], g: [[], []], Aa: [0, 0], Ab: [0, 0], J: pl ? [0, 1] : [1, 0], o: 0, ln: [0, 0], W: 0, it: 0, dl: 60, e: 0, S: 0 };
-  lastInput = clock; amb(1);
+  mkG({ O: 1, Ad: 1, A: pl, J: pl ? [0, 1] : [1, 0] });
   BAN = { a: 'DERBY DE JONRONES', b: '60 SEGUNDOS · ¡SÁCALA DEL ESTADIO!', Al: TS[pl], t: 2.2 };
   newPitch(2.2);
 }
 function newBatter() {
-  G.b = G.s = 0; G.ln[G.A]++;
+  G.b = G.s = 0;
   if (!G.O && G.B < 3) { if (G.D[2] || G.D[3]) sfx.charge(); else organ(.2); grada('¡VAMOS ' + TN[G.A] + '!', TS[G.A], 2); }
 }
 function startHalf() {
@@ -429,7 +420,7 @@ function startHalf() {
   organ(1.2);
 }
 function newPitch(delay = 0) {
-  P = { ph: 'r', t: -delay, type: 0, bx: 0, by: 0, cx: 0, cy: 0, sw: null, Bn: 0, Cu: rnd(.8, 1.5), sx: 0, sy: 0, Bi: null, Bd: 0, Tf: 1, Bp: 0, L: 0 };
+  P = { ph: 'r', t: -delay, cx: 0, cy: 0, Cu: rnd(.8, 1.5), sx: 0, sy: 0 };
 }
 function endHalf() {
   const bt = G.A;
@@ -439,11 +430,10 @@ function endHalf() {
   startHalf();
 }
 function gameOver() {
-  G.st = 'v'; G.ot = 0;
+  G.st = 'v'; G.it = 0;
   const w = G.E[0] > G.E[1] ? 0 : 1;
   G.Cd = w;
-  for (let i = 0; i < 6; i++) burst(rnd(150, 650), rnd(80, 220), TC[w], i * .25);
-  sfx.charge(); sfx.cheer(2.5); applause(4, 1.3);
+  party(6, TC[w]); sfx.cheer(2.5); applause(4, 1.3);
 }
 function toTitle() { G = { st: 'T', Ad: G.Ad || 0, it: 0 }; MSG = BAN = FB = GR = null; Y = null; amb(0); }
 function runScores(n = 1) {
@@ -458,19 +448,19 @@ function inGame(dt) {
     if (BAN) BAN.t -= dt;
     if (MSG) MSG.t -= dt;
     if (G.st === 'p') stepPitch(dt);
-    else if (G.st === 'y' || G.st === 'o') {
+    else if ('yo'.includes(G.st)) {
       const fast = G.st === 'y' && (hd(0, '3') || hd(1, '3')) ? 3 : G.st === 'y' && Y.K !== 'a' && !Y.hr && !G.J[1 - G.A] ? 2 : 1;
-      for (let i = 0; i < fast && (G.st === 'y' || G.st === 'o'); i++) { const k = G.Au > 0 ? .4 : 1; G.Au -= dt * k; stepPlay(dt * k); }
+      for (let i = 0; i < fast && ('yo'.includes(G.st)); i++) { const k = G.Au > 0 ? .4 : 1; G.Au -= dt * k; stepPlay(dt * k); }
     }
   }
   if (G.st === 'd') return derbyEnd(dt);
-  if (G.st === 'p') drawPitch(); else if (G.st === 'y' || G.st === 'o') drawField();
+  if (G.st === 'p') drawPitch(); else if ('yo'.includes(G.st)) drawField();
   if (G.st === 'v' || G.st === 'T') return;
   hudMsgs();
   if (G.W) {
     g = gx; rc(0, 0, W, H, 0x000000, .6);
-    T('PAUSA', 400, 250, 2.5, US[0], .5, US[1], 1, 7, 24);
-    T('START: SEGUIR · 1: SALIR', 400, 330, 1.8, CH, .5, 0, 1, 7);
+    T('PAUSA', 400, 250, 2.5, US[0], .5, 1, 7, 24);
+    T('START: SEGUIR · 1: SALIR', 400, 330, 1.8, CH, .5, 1, 7);
   }
 }
 
@@ -500,7 +490,7 @@ function aiBat() {
 function stepPitch(dt) {
   P.t += dt;
   const bt = G.A, ft = 1 - bt, hb = G.J[bt], hf = G.J[ft];
-  if (P.ph === 'r' || P.ph === 'w' || P.ph === 'f') {
+  if ('rwf'.includes(P.ph)) {
     let [mx, my] = hb ? axis(bt) : [0, 0];
     if (!hb && P.Bd) { mx = clamp((P.Ct - P.cx) * 8, -1, 1); my = clamp((P.Cs - P.cy) * 8, -1, 1); }
     P.cx = clamp(P.cx + mx * CUR * dt, -1.6, 1.6); P.cy = clamp(P.cy + my * CUR * dt, -1.6, 1.6);
@@ -527,8 +517,8 @@ function stepPitch(dt) {
       P.bx = clamp(P.bx + sx * STR[P.type] * dt, -1.9, 1.9); P.by = clamp(P.by + sy * STR[P.type] * dt, -1.9, 1.9);
     }
     if (!P.sw) {
-      if (hb) { if (pr(bt, '1')) P.sw = { t: P.t, pw: 0 }; else if (pr(bt, '2')) P.sw = { t: P.t, pw: 1 }; }
-      else if (P.Bi !== null && P.t >= P.Bi) P.sw = { t: P.t, pw: P.Bv };
+      if (hb) { if (pr(bt, '1') || pr(bt, '2')) P.sw = { t: P.t, pw: pr(bt, '1') ? 0 : 1 }; }
+      else if (P.t >= P.Bi) P.sw = { t: P.t, pw: P.Bv };
       if (P.sw) P.Bn = clock;
     }
     if (P.t >= P.Tf) {
@@ -537,7 +527,7 @@ function stepPitch(dt) {
     }
   } else if (P.ph === 'c') stepChap(dt);
   else if (P.ph === 'i') {
-    if (P.t > P.hs + .22) { G.st = 'y'; S.cameras.main.flash(160, 255, 255, 255); }
+    if (P.t > P.hs + .22) { G.st = 'y'; CAM.flash(160, 255, 255, 255); }
   } else if (P.ph === 's') {
     if (P.t > P.L) {
       if (walkOff()) { G.g[1][G.X - 1] = G.o; return gameOver(); }
@@ -551,7 +541,7 @@ function resolvePitch() {
   const [ox, oy] = bk(1), fx = P.bx + ox, fy = P.by + oy;
   P.fx = fx; P.fy = fy;
   if (P.sw) {
-    const pw = P.sw.pw, dtm = P.sw.t + SWT - P.Tf, r = RAD[pw] * (G.I ? .82 + G.ck[10] * .06 : 1), dx = fx - P.cx, dy = fy - P.cy, d = hyp(dx, dy), ok = abs(dtm) <= WIN[pw];
+    const pw = P.sw.pw, dtm = P.sw.t + SWT - P.Tf, r = RAD[pw] * (G.I ? .82 + G.ck[9] * .06 : 1), dx = fx - P.cx, dy = fy - P.cy, d = hyp(dx, dy), ok = abs(dtm) <= WIN[pw];
     if (ok && d <= r) return contact(pw, dtm / WIN[pw], 1 - d / r, dy / r);
     fb(!ok ? (dtm < 0 ? 'MUY TEMPRANO' : 'MUY TARDE') : 'LEJOS DE LA BOLA', '#f84');
     return call('swing');
@@ -591,7 +581,7 @@ function contact(pw, tq, q, dy) {
   const perf = q > .82 && abs(tq) < .25;
   fb(perf ? '¡PERFECTO!' : abs(tq) < .3 ? '¡JUSTO!' : tq < 0 ? 'TEMPRANO' : 'TARDE', perf || abs(tq) < .3 ? '#7f6' : '#fc4');
   P.ph = 'i'; P.t = 0; P.Cm = sp; P.Cn = la; P.hs = perf ? .15 : .06 + q * .04;
-  S.cameras.main.shake(140 + q * 180, .004 + q * .011);
+  CAM.shake(140 + q * 180, .004 + q * .011);
   G.Au = perf ? 1.2 : 0;
   if (G.I) return chapHit(ev, la, sp);
   startPlay(ev, la, sp);
@@ -629,8 +619,8 @@ function simBall(vx, vy, vz) {
 function startPlay(ev, la, sp) {
   const cl = cos(la), sim = simBall(ev * cl * sin(sp), ev * cl * cos(sp), ev * sin(la));
   Y = Object.assign(sim, {
-    t: 0, F: DEF.map(([x, y, s]) => ({ x, y, s, tx: x, ty: y, Be: 0 })), K: 'a', fk: -1, hk: -1, ft: 1e9, j: 0, L: 0, th: null,
-    B: 0, V: 0, fc: 0, Bh: 0, U: 0, G: 0, la: la * 57.3, sp: sp, Aw: sim.Bq > 300 || sim.hr, Ac: 0, R: [], w: 0
+    t: 0, F: DEF.map(([x, y, s]) => ({ x, y, s, tx: x, ty: y, Be: 0 })), K: 'a', fk: -1, hk: -1, ft: 1e9,
+    B: 0, V: 0, Bh: 0, la: la * 57.3, sp, Aw: sim.Bq > 300 || sim.hr, R: []
   });
   const B = G.D, fo = [0, 1, B[1], B[1] && B[2]], air = Y.la > 14 && !Y.hr, two = G.B === 2;
   Y.R.push({ s: 0, C: 1, b0: 0, At: 1, v: .5, fo: 1, Bw: rnd(-.15, .15) });
@@ -753,9 +743,8 @@ function arrive() {
 function homer() {
   say(pick(['¡Y SE FUE!', '¡SE LA LLEVÓ!', '¡QUÉ PALO!']), Y.Bt + ' PIES', TS[G.A], 3.2);
   grada('¡OTRA! ¡OTRA!', TS[G.A], 4);
-  S.cameras.main.shake(450, .012);
-  sfx.cheer(3); sfx.charge(); applause(5, 1.3);
-  for (let i = 0; i < 7; i++) burst(rnd(120, 680), rnd(60, 200), i % 2 ? TC[G.A] : 0xffffff, i * .22);
+  CAM.shake(450, .012);
+  sfx.cheer(3); party(7, TC[G.A], 0xffffff); applause(5, 1.3);
 }
 function stepPlay(dt) {
   if (G.st === 'o') { Y.w -= dt; if (Y.w <= 0) afterPlay(); moveFielders(dt); return; }
@@ -822,6 +811,8 @@ function afterPlay() {
 }
 
 // ---------- fireworks ----------
+// celebration: n bursts in colour c (every other one d) and the charge fanfare
+function party(n, c, d = c) { for (let i = 0; i < n; i++) burst(rnd(130, 670), rnd(60, 220), i % 2 ? c : d, i * .24); sfx.charge(); }
 function burst(x, y, c, dl = 0) { for (let i = 0; i < 44; i++) { const a = i / 44 * TAU, v = rnd(70, 170); FW.push({ x, y, vx: cos(a) * v, vy: sin(a) * v, c, l: 1.4, dl: dl }); } }
 function stepFW(dt) {
   g = gh;
@@ -840,13 +831,15 @@ function ballG(x, y, r) {
   if (r > 5) { LS(max(1, r * .13), 0xe0322d); g.beginPath(); g.arc(x - r * .95, y, r * .75, -.9, .9); g.strokePath(); g.beginPath(); g.arc(x + r * .95, y, r * .75, PI - .9, PI + .9); g.strokePath(); }
 }
 // characters: pixel-art sheets rendered from the CC0 Quaternius mannequin (posed in 3D, reduced to the palette).
-// Sheet: base64 PNG ('-' stands for '/'), frames [x in sheet, width, x offset from the feet], top offset from the feet.
+// One sheet, base64 PNG ('-' stands for '/'): batter on top, pitcher and fielder below. SHS per character: frames
+// [x in sheet, width, x offset from the feet], y in sheet, height, top offset from the feet.
 // Recolour slots in alpha (255 - slot): 1-3 shirt, 4-5 pants, 6-7 helmet / cap / hair, 8-9 and 12 skin, 10 shoes,
 // 11 white, 13-14 bat. KM: knee and shoe lines of each batter frame, to dress the chapita kids: Ce tank top (shirt
 // above row 46, shoulders and arms, becomes skin), Cf 1 shorts / 2 ripped pants (holes at the knee), ft 1 cholas.
-const SHS = [['iVBORw0KGgoAAAANSUhEUgAAAPAAAACBBAMAAAAMBSrFAAAAKlBMVEUAAAAXEx-ZoGaocDwqOmr09PgVGjzc3ui3ek56SiryuBy2ixWmp686OkRB5Up+AAAADnRSTlMA--Lx+fT4+-f2-fz69T78ufkAAAhISURBVHja7Zo-buM6E8DFG3CsJPJadhF-JzB0AgNG+hTGqw0s1KtS4yad2pQp3cqV2rBylUZNDuC7PJASJf4ZUrKdbB4+LLHIyuRwfjPDESmRCgKrAA1+pJDl40+Blz-jMkmSv+A-U8KfA6+Cv+C-4D8NJvC9YOfdNPnOydQzf5Dld64f-0nwt85pHu3h-yt49cfvcPghMGwAMDAAOAdBto0JJTieIslms9lQ2y0iqnEwbDabkWRyt9msUfKdA8zr1zhY2LoZl3BC-drl8GZtgXvl9hBfAG5EMdm7DkyRehRMZB9voQHp1CDg1qINGOC2fo2BW2V+l8lzcE879WtrmXv43TYZ4F65PcRXg4myzDnAJO16WOCuzQ-ewj3t1XNZEiYdmKQjwEakH1I9fo5yv93qYAiTpFvmOvA6cYHDG8C9XzSAJEkQj3e6+gdZn9JrwSTfPpNUyoLgJo+9Z6kPvBZgaoIbo55248HrhttPnndpo+Vpl6yoplz0uAcABNxoS-3gIMozaNWvQ45dgXK3pqLpKYUkUSZf8tD0uN9un42kBmjbnkaAufqeS9U78ikVBZ7VOAR3vEfaglf6vcTr05QLDIPvnrg0hHqYxfS0hvQhTXdcf54p9Y09OwscwIOIUDoMJnkOPB-WRpibm2ZawMuDAEcaGERId9utPVP-5uZye4dWiSh7zdLfm9AIswDvAKB4SXf-hBo4XRdFIQzahomx8PJbfFpwe4fA8Os1exBg87GBwKwsSwBIo3CVZwoYAKYAaXr-HK4yE-wbigKK4mUIPC3eAOAuTGCnjwqJ38umQJRF2XTaTStQluWhLCG9h8yM0gygFP+G9sVIUbyGq-IAADPd49lRgstDnk+L4kXGiJWsMeg+MsGzsiuHIYeLcCXFwQEuIYOiKBoGYRJcHvIwcoO9j118MJJeWlsJGOu1zEqYti7HjDFWCquiDPShJEoXXZsd6OJl1cod34+VDmbsvZTelYfW5RbMq6OpDIPSZ1SweeLPuMPMA5aqpgr4-cibDsrId9HowYx6wC+NCBN-mCoqwKwsj1LZoYG0BonKa8GkKLi7rWoHuGRSW3NDtWDhshfMfGDh8FGE9IiCZQPPpQM1h+BQ6INMdHDlBisO+8Gsa5Xgkr17wUcf+KUJJCudYIaD2yEop3qoeaxHgWcl68D8fyurmzRiADH-o489N6gywKSNRtvqzOqZ9KX1vDIzhclq0i0h+hAYUzJhanGDuRzEDsnYoSBmMq+NwbkALF6hrwOLeusNXAcPLFCxQ5I4wMSj+CLwMGA8WPXiAjB1KBlZb7pcXQsmjhyJPblD3OPvkQ3GgckIcFW9vb2OBVOrQcwFxwobyHekvnsUOLLo1xiwmPJtBzxgvL5-BjlG2dsbHQPGVs8bwYNbXR5wA6A2+N0FjiU4h+zLwaRdFqkXnI8EH1EwCmhXXR+Y3QpmN4Dzwc098a7CHGA4Ytl+LGdHHHyYdeBsGDxDwcBLGNtgmJWHygGOKwEGR9GFoXKDkZmvqY0rxzorymSJF6rvVfsA4+u-HUwuBf8v6QoKtnbaadPm0u4FPyoDG14GJrWotW+LRjrKsOU4a3VljxhBNzbKpbAJruv6w74tSF1-ZIDPECQXBaJ8+FCC1LksugtzCbbrRS0GjvK2bX8aAf64GIzWt+CmaV8PzlvzYXA2Gjz-2Nc1D2E9ElwLcQRc+8AZEr296LQfBhOue+8H6w0ug2Q+tuDTmCFuwIZsA-jwgK1Yz+u+nEZEeo-Ktlos11wGGeChWM9lpC8Eo7G+ACyGuPaBLdeIE9y0AMBI8L4+NbIXgZFYkxZIRgwyEUPcyp7wFMXBtQN8CkaBeW7VfrA5XQ+Dm2ANgvedkZeBP-CpZTRYkUXAJxCuWWmN1TfKaIC6gU411ANu53Jqgskg2JvW14ORekXHfBT4FKDgtqpxDQPXWLpfAqbyygX+sAGYQb0y9dKTW35wE9PMAjf1t4BPgR9MMDB1G9T1vR1co2C0-hIw9YGxhI-2sh41KHDkKp5bQnQcmOQ5fiNEygMPGQYrwXGA+SBn6pNkm1Om8kh5huF9fOB8r4CNeYjk3V2ppi-Je7BmkAbmfTLvIa4yKoZkJEPKlfSZorxyawZpyi4BE+Mxk3vWNs5zHSxfE3RwlKvBnXt3BCLlVYN8OMGqSqK8n2jvT7zhpMUr8zm8py5w1CnSVCr2fBVYvysVz3Rw1r0XEW1djPQ3ta8HQyb122A6EhwNgPsh7sGTR5hTK78tsKFtCJzrJmNgCFcEC6469jeBSdR9CKGB4yqkdn5bueUFE-0BdR6poiFA3oe02x8hjKlgUCc0bRdgPgDO9C0SZYdl0u2JAOShAu7OOCItQhDNqb5DMxYcTNQPpeOq+8RjsgTV40rd-VE7a-stk+XSuf9CjC0mgJgq27AhdPXLRww8WS77DgCh8Z0TuL+6N74Fj9X9zJhVVXfZW0QUGYBJD46NYybCmM9jH7j7ETPtWmWpP6wDwspzqAhjwMQJVnTH9kGgD0xdv9V+OlhlaTLXg8ltYOsEsnKfsFlGDoG1PuR6ML0YDBU4wPbR57VgioBB-dxMBccXgY0WEuPgPhkIhMqco4PpaLDVAqCCKwy8+FTmyS8E9wMYs19gg6EB05Fgx-dzliwHU2UBsKdD-QxBAYN9Lk-Y4nz+xOZLBNzrXJwVclwtQD1c6FcwUA4dTEDFwchh1uLT+iagZ4EAy1-x4nxurvVDk3jRVgs7TW3hSvbSGYtP6+yf52ygDqZ06HyWxmt+gfRJ2Gn5hlVy8Bmx5hOwsy44C7KlZCGreUdqt34iycXBiI0t+F80Apnda88qWQAAAABJRU5ErkJggg==', [[0, 46, -18], [46, 48, -20], [94, 85, -29], [179, 61, -33]], -131], ['iVBORw0KGgoAAAANSUhEUgAAAD0AAAApBAMAAAB0CzxXAAAAIVBMVEUAAAAXEx8qOmoVGjy3ek56SiryuBy2ixXc3uimp686OkSpXNrRAAAAC3RSTlMA--n49-b9-Pv69eKXW+AAAAHRSURBVHjafdQ7suIwEAXQ2zvQdWEZyJ5YAcUKqGIDrhovQImInYxiMqfOcEj6VjnT8k9+MEOgaveRWr9CAEgAEBp8-IlzKsXp-D8X9y8vkiw+zvbmhTtdzDpb7uQZ4rQFZFfMPq9XmsYAbBoq3+Z1ivvKXdSl-MXL5TxNOxYSkjRgWRO7pqlPi4+FbAgheAneBkOWtRvrinOXjWtbxZakNe9uvdVeMYbSBq-+5ZzTo7AxxN-eljWDRxWDDzHqTlg4amBjpc40TmwI9xijgQQyBZY16Vl70gMSQoxawKYgbaxhQ7HB6wGhirFle03e8mZ0-9rNhliayYVXSLjHVm4GsPe0ntQCot6M6VaYLlSvVCr+cF+1ZQ1gPzwfgPTdY3FNi7-GzPfDMJjpOpCCsKPWWb3X8Yf0NXVMF9sNz87k3pm5Y7m4dKPLkHnH0YfBSNdz4yl45C7tm3MMdOWH2XuuPgZk7kaGKb2fPGUOvTD3g8659deUfs4+rC5Df0zeQ-Sg5dXjh8vWzewtUKVa6foNsG8-eDTLn65qgePLAIfV00BAvnOvPruk+pidqSoz14Mwi7-UZeP5C6DbJufccePpRDUzj4ekPGZfnxp+etn+Jv8Ajie1OtNUVN4AAAAASUVORK5CYII=', [[0, 12, -6], [12, 12, -6], [24, 20, -10], [44, 17, -8]], -39], ['iVBORw0KGgoAAAANSUhEUgAAACgAAAAfBAMAAABnr5JLAAAAJFBMVEUAAAAXEx8qOmoVGjzyuBy2ixV6Siq3ek6mp6-c3uiocDw6OkT1ZPjSAAAADHRSTlMA--n4-fz29-r78fVKiNY-AAABAklEQVR42o3SMW6DQBAF0D83mG8Bhriyr5ATWFofAIk5gI9AldodLt2FY1D7ctHMQgKOImUL-u4TOxqWBZbBTeQhJ10FJGJ3Oq4Cu+NvlFPseMX3v1BI-sS8vUhM5whrARRkrJIllZSSo+e8SufCw9Tx0mmZLmYd6WEtJJl1SpbW8rqP4IxSlVZdVT4iIDRrPdqKAFl6S-ueZA-UTZX7vHmb-ef9oUAdTxmHwCZQhvuYcdCMb45DxtERzTg+8D8kM0axHGhUHG-MyDpCZfDmxXtBrVzhJH6OKPXg2PrMMf44X3BaoR+DAirPWKn4Z04ZsaC-f3Dk9y3KV2kpsRleArq1LzYjTMv4MyGrAAAAAElFTkSuQmCC', [[0, 12, -6], [12, 14, -7], [26, 14, -7]], -28]], KM = [[97, 125], [96, 122], [98, 124], [97, 125]], SIM = [];
-function sTex(i, L) {
-  const k = 'S' + i + [L.sh, L.pa, L.hc, L.sk, L.fc, L.Ce, L.Cf, L.ft, L.br], im = SIM[i], F = SHS[i][1];
+const SPI = 'iVBORw0KGgoAAAANSUhEUgAAAPAAAACqBAMAAABhbt8wAAAAKlBMVEUAAAAXEx-ZoGaocDwqOmr09PgVGjzc3ui3ek56SiryuBy2ixWmp686OkRB5Up+AAAADnRSTlMA--Lx+fT4+-f2-fz69T78ufkAAApDSURBVHja7dstbOPO1gZwDyfzbLJ1GiegfTmIykGkVfmC1Ysr-RVuZBJSFlp2C0MdZBqjoJKScpVzTu6ZcZ9bO8dfazld6d49WjnumZnzmw8nK22zgQ7Y4I+Eub35U-Ct-TPw3d1f+Gti8ufg1Zebf+G-sMFlYdvU9O3WfvXnBz-Fb-6nYDZ9PTz5b4VXX-4Oxx+C8QOogwHUHgLbeoYBbH3DDwmrl2V8uh6GtKGnO-3xY10rT2tg5teE1Zw4q-Zg+XXDgqWFsC7OlkGwdGVfPSPCVufrYcMxrWEDwzKE1YwkQLiaX2uYxTqWbH4G3y3LcJIGAePqn48mwqo4j3gE2PCvuWbYbDiCsG7rgH9BYJb3fc3kjrAU6YTVG-zqs60tvv-6VYUhH723N+fw+q4JngyHrStPGHcSesUP1fJXzG-sUNgkv36aDftCXIkbtrKlAV4LzDNQk7p-6A+vCxeWrdNNUeVeYFsp7kd8B6Dhj2qbdjgIkxgf5dcTx65QerdufNP9RmaE0myvihFyTj-vqjDw0XbfA3bl6VZWNpXhPiD1YUt5lyzg6hkYl5dW+dMDnt673vAuSq5xm7+5khKufhKX8g6WvIIDuHeI1OuGTZLAPQ-ryjbzTTPb4fHKw2EFBnDlYf1JLfAabr42aI8wfooFnnCby-ADgN3j5uH-JxV4s97tdjIhDyNQH1yznZtvF4zrp-jKwzivgXmapgA24UR2ugQDmEl68-3nZBWfw-9AXJlYFzzbPQOYytQfqqdiomNaBMI4jGczywZIbi-pzXfE57s0B1L-Bx2w2e2eJqt0D2BeXfH8QDjdJ8lM1sA9ytPcp-E9PIfdHnFQ14J3kxW7Q8FsiCHHWhgmF5gTmoTNMNpcdxh3n71ZhQAjnaeYfSw5yiVSP6swRvUoDYeoamqjBV4V3aTWIasUkZDyrLUvlkw4d-DM56pjem22DMTcLThvgVlqVoKPB9e058kzogqc2xb40Xfx3V1BW4Vd-sBie49wQj45AOZOz1OWroWZL5ZsS7AsuQPO22C-YIGPBa9hNhzdku35Eez5rHNMFc4a4dKC22BGBU7l0gYf2mBZMDe0Ac41zBHuyvcYI+oJz1NW93Wkp4KPrgGI3OUzzy3KSjAbj3Sb4WDOtYhbhfm+YdoAtUcAq2BGE8x+INAKq-yxgPNhcAAgGAAz74a3wFaDupDuaRpgo7sPgzUwHA6iQbDVRfrn9ZKzobBRCyas8rqYPv+Wvrqhd161Zc-PT31hqxr8Z8FBAVHxdqqH-ZA8vO6AWZ8L6AnX5wlLWxg-P9s+sNB2ZBjBcLgArIaPTXBEOEE8Jsz8UQ1QcNITPtTAGmA+74Dz4TCB4XBiu+TIr6sBxqHuaT+k80M9vJ8T1kvW8LwWhotJpGHM033WAEeZh9EQ1c7ImmGJ+jwnVD-m2219lBHTCrTkvxw2vwv-391-ohZmkiEJUwv0gW-wGZPfg82rz+q3BXyEsdWuiVFEfKMENdkwYedzWOJFvy2MZGPUf0KYxIe0kqgL1kkY1SUsCOu8y9bCYfLRtj31gF-6wzqv4KJp+2q74EU3HPeGFy9baZSm156wq6VhF21wrHdPYDdo2w0bV3vbCrNB5TUsDYRP3UdMWPpqgHvaOSE2MU7dOy2uDw3rpekJqSaG7YKTQTDzg2Ae8WsLrJdmGmC2AOgHy4JPwO-CzGvYfryeOp+tLfue6h9RAh35gEU6YT5br60wP677w1K1F7yVLgNglafXF2bfevgkh68ea+ZrYcuhGtaPQwv88Vluz2HTDvNudFjn2cC7Lph9FcyUdKmHVZ7FesOWd03wiwZ8XsPUTBe86IbdnurHmvnBMLkW2NTBtmlCHDsK-FoLMz8Yti1w7QMfbpnXsFUranm22LUnbJJEfmyZkF6HCja3w+6Q41J9PszmHE74YzGmDU62JViqVxtZd-HiKaYJc0LnMMfEbXAia9IwV-YJ+25MsyMnVCo2ADavUqXaxsZFUoW3Jw37hiLPMS1wyBoOemmEWZJpDgpZnA3sxbaWBW9tExyyEEuq+YwF812pVlaFY3kgLfMcwSO4JIyY9TVse8JhB8wjLsPfbrDgTrfArNYTTipTroUxWRm1uZzoGLAJQxmp4SibWFJVmJ26YZNUqAUlHxOAbQKD3Uyel2HJs4GzYLVWuNJoKv82gm9gG5BMSnDG+7CyQwh59j4A9IWDb+UvSkfZKg6YB8pwqTbKgxFUit2iEQZQnWRkP+F8AuZxe6NhX-tzAMBd4c9YBZ3fBaeVl+GMQpQjKsEl6xvzvj-v2bFtxRrWP8ht5b5s5Vb1V1vDqEDoA5smuFw74n0-2Db9zHEKrliVPsNhMwhWY1VPhqrdE1ZjzHDY-jaMDPWwYobDtgbGHerhqD+sJ2miKqwfBoMJYOth2xfWLUAZzurg5RskxoczfDZeQ8MoYNsTZk-VYjXMFOuzhmW2HkZ5g9i6fH9-06yBgss1l+8lOcqWKNL8xQLz7pb5cyBzsFoyZNfOYfNpwcP8KZISxT2YZR6W88R5tcmKoyqGwJlKToCgfJhc0Ps7J19ZF7gmuVEr1knC71Yn3wgDJRgO1udllky7gVa3qqSEg2vm6GB28KOrQxVt+TJamOKr-NP2L4ZP13wZF5ZrEwx24stYMRWyBAPn87IXheW60aV98-pSMPAgFeXqKs+mLA155dlfBDb+iyt4foZzdx7yxroEQ4Iv48LGweb6X+BX4qducdxqk+7nqXUvUW7HciFh3dfNEczk60L3hIunzewxd2J6OO6DubyMBUsxiX2xJAjP-0dW-McL31yIxxSpg7ORYXf1f7HKCqtwvjf+K5uydn5rdzx4vp87Ps-T63m6d-C6+A9684OIBshzXOPRvWAsOE-z434uRyxglKd7WRUExvQHchRwgKc8e0Ywe-QvY8GRg+FXatxh+t00KeBuEPl5IMKTJIEMwVgwnoA9nvZyDcTzxygr9TfADsBMyFP8JJ2BhR0LxvUznmFkvX4TZYEZskcPZ9jZWfiaSN64q--n4tFgA+SwAuXX9gM2eJSlH+RmZ5E4kv-uKvBpLNg9PhDfX+XVwc9W0g5GIHC8cvCLh5PteDAAB0c4g-dRdv3k--XEXgYOfU1zkr0k-ORu9o-5V8Ahfzng1u9v0hlk5SZG6GH+PnR82Jfk0ooZeDjwMBYePmE02Ljv7NgynFjOQJ5z8RwJu3BZczIYF5arh81rCU5gCS9t5OHMvI0Iv74KfMInzJvYBpEVzcHwWVwANpmCEXzCy5Fh-gpuQfgEwn4GEFh8EyydCAR2PBgow1b+FOnQwUsPSxAeK0gJjDK8kBuBzbuD-Ux4GR9++-BeCEvaJ6G50WA526WHT4FJ4kBAuXFL9+sMLgqbKmw9fMFwz1TkbL+4SC5h9pVwXiCQl0gyS4GDxRfA7o+EeS-D0RfDLiMHfnEYfoNRgiF39vLwm4NNBf4AcVF46WAQW1ZgXHTFjrLEjLvQgyQvHqg--svFvwGx5Apicp9-MwAAAABJRU5ErkJggg==', SHS = [[[[0, 46, -18], [46, 48, -20], [94, 85, -29], [179, 61, -33]], 0, 129, -131], [[[0, 12, -6], [12, 12, -6], [24, 20, -10], [44, 17, -8]], 129, 41, -39], [[[61, 12, -6], [73, 14, -7], [87, 14, -7]], 129, 31, -28]], KM = [[97, 125], [96, 122], [98, 124], [97, 125]];
+let SIM;
+function sTex(L) {
+  const k = 'S' + [L.sh, L.pa, L.hc, L.sk, L.fc, L.Ce, L.Cf, L.ft, L.br], im = SIM;
   if (!S.textures.exists(k) && im.width) {
     const c = document.createElement('canvas'), x = c.getContext('2d'), w = c.width = im.width, C = [0, lt(L.sh), L.sh, dk(L.sh), L.pa, dk(L.pa), L.hc, dk(L.hc), L.sk, dk(L.sk), L.fc, 0xf4f4f8, lt(L.sk), L.br ? 0xead4aa : 0xd9a066, L.br ? 0xc28569 : 0xa8703c];
     c.height = im.height; x.drawImage(im, 0, 0);
@@ -854,7 +847,7 @@ function sTex(i, L) {
     for (let j = 3; j < p.length; j += 4) {
       let s = 255 - p[j];
       if (s && s < 15) {
-        const X = (j >> 2) % w, Y = (j >> 2) / w | 0, [kn, sy] = i ? [] : KM[F.findIndex(q => X < q[0] + q[1])];
+        const X = (j >> 2) % w, Y = (j >> 2) / w | 0, [kn, sy] = KM[SHS[0][0].findIndex(q => X < q[0] + q[1])];
         if (L.Cf && s > 3 && s < 6 && (L.Cf > 1 ? abs(Y - kn) < 3 && X % 5 < 3 : Y > kn)) s += 4;
         if (L.Ce && s < 4 && Y < 46) s = s < 3 ? 8 : 9;
         if (L.ft === 1 && s > 9 && s < 12 && Y >= sy) s = Y < sy + 2 ? 8 : 10;
@@ -863,17 +856,17 @@ function sTex(i, L) {
       if (p[j]) { const v = snap(p[j - 3] << 16 | p[j - 2] << 8 | p[j - 1]); p[j - 3] = v >> 16; p[j - 2] = v >> 8 & 255; p[j - 1] = v & 255; }
     }
     x.putImageData(d, 0, 0);
-    const t = S.textures.addCanvas(k, c); F.forEach(([sx, fw], n) => t.add(n, 0, sx, 0, fw, c.height));
+    const t = S.textures.addCanvas(k, c); SHS.forEach(([F, sy, h], i) => F.forEach(([sx, fw], n) => t.add(i * 4 + n, 0, sx, sy, fw, h)));
   }
   return k;
 }
 // frame f of sheet i with the feet at x, y
 function spr(i, f, L, x, y, d = 1.2) {
-  const k = sTex(i, L), q = SHS[i];
+  const k = sTex(L), q = SHS[i];
   if (!S.textures.exists(k)) return;
   let im = tp[ti++];
   if (!im) tp.push(im = S.add.image(0, 0, k));
-  im.setTexture(k, f).setPosition(RP(x + q[1][f][2] * PX), RP(y + q[2] * PX)).setScale(PX).setOrigin(0).setAlpha(1).setDepth(d).setVisible(true);
+  im.setTexture(k, i * 4 + f).setPosition(RP(x + q[0][f][2] * PX), RP(y + q[3] * PX)).setScale(PX).setOrigin(0).setAlpha(1).setDepth(d).setVisible(true);
 }
 const kit = (c, pa = 0xeceef6) => ({ sh: c, pa, hc: dk(c), sk: 0xb77a4e, fc: 0x181425 });
 // batter: stance, load, contact, follow-through; light arcs smear the bat through the swing
@@ -904,7 +897,7 @@ function drawPitch() {
   const bt = G.A, ft = 1 - bt, ch = G.I;
   const at = P.ph === 'r' ? 0 : P.ph === 'w' ? .35 + P.t / WIND * .87 : 1.22 + (P.ph === 'f' ? P.t : 1);
   spr(1, at < .35 ? 0 : at < .9 ? 1 : at < 1.3 ? 2 : 3, ch ? kit(0xff922b, 0x4dabf7) : kit(TC[ft]), 400, 292, 1.1);
-  if (P.ph === 'w' || P.ph === 'f' || P.ph === 'r') {
+  if ('rwf'.includes(P.ph)) {
     const al = P.ph === 'r' ? .5 : 1;
     LS(2, 0xffd43b, .9 * al); g.strokeRect(362, 380, 96, 110);
     for (let i = 1; i < 3; i++) { ln(362 + i * 32, 380, 362 + i * 32, 490, 2, 0xffd43b, .35 * al); ln(362, 380 + i * 36.67, 458, 380 + i * 36.67, 2, 0xffd43b, .35 * al); }
@@ -922,7 +915,7 @@ function drawPitch() {
   if (P.ph === 'c') {
     const f = P.cf, q = 568 / (f.d + 3), x = 400 + f.x * q, r = max(2.5, q * .04);
     el(x, 296 + 1.5 * q, r, r * .35, 0, .3); capG(x, 296 + (1.5 - f.h) * q, r);
-    g = gh; box(560, 528, 226, 60); T('DISTANCIA', 673, 545, 1.4, DIM); T(round(f.d) + ' M', 673, 569, 2.6, CH); g = gw;
+    g = gh; dist(round(f.d) + ' M'); g = gw;
   }
   if (!ch) {
   const [mx, my] = caught ? zs(P.fx, P.fy) : P.ph === 'f' ? zs(lerp(0, P.bx, min(1, P.t / P.Tf * 1.4)), lerp(-.6, P.by, min(1, P.t / P.Tf * 1.4))) : [440, 480];
@@ -936,7 +929,7 @@ function drawPitch() {
     ballG(lerp(446, 400 + sin(P.Cm) * 700, k), lerp(434, P.Cn > .15 ? -40 : 300, k), lerp(13, 5, k));
     const r = 10 + 90 * k; LS(6 * (1 - k) + 1, 0xffffff, 1 - k); g.strokeCircle(446, 434, r);
   }
-  if (P.ph === 'r' || P.ph === 'w' || P.ph === 'f') {
+  if ('rwf'.includes(P.ph)) {
     const [x, y] = zs(P.cx, P.cy);
     LS(2, TC[bt], .55); g.strokeCircle(x, y, RAD[0] * 48);
     LS(3, TC[bt], .95); g.strokeCircle(x, y, RAD[1] * 48);
@@ -947,13 +940,14 @@ function drawPitch() {
   gradaHud(154);
   board(); basesHud(G.D);
   if (P.ph !== 'r' && P.ph !== 'w') TD(ch ? 'CHAPA ' + CPN[P.type] : PN[P.type] + ' · ' + P.Bp + ' MPH', 400, 96, 2, TS[ft]);
-  if (G.J[ft]) chipCol(14, 462, 'LANZA ' + tname(ft), ['1 RECTA', '2 CURVA', '3 CAMBIO'], ft, P.ph === 'r' ? -1 : P.type);
+  if (G.J[ft]) chipCol(14, 462, 'LANZA ' + tname(ft), PN.map((n, i) => i + 1 + ' ' + n), ft, P.ph === 'r' ? -1 : P.type);
   else TD('LANZA ' + tname(ft), 400, 36, 1.8, TS[ft]);
   if (G.J[bt]) {
     const it = ch ? ['1 PALO', '2 PALAZO'] : ['1 CONTACTO', '2 PODER'];
     chipCol(ch ? 14 : 786, 462, 'BATEA ' + tname(bt), it, bt, P.sw ? P.sw.pw : -1);
   } else T('BATEA ' + tname(bt), 786, 571, 1.8, TS[bt], 1);
 }
+function dist(t) { box(560, 528, 226, 60); T('DISTANCIA', 673, 545, 1.4, DIM); T(t, 673, 569, 2.6, CH); }
 function fbHud() { if (FB && clock - FB.k < 1.4) T(FB.t, 786, 102, 1.8, FB.c, 1); }
 function board() {
   if (G.O) {
@@ -961,7 +955,7 @@ function board() {
     const s = max(0, ceil(G.dl));
     T(G.I ? G.ck[0] : CU.n, 26, 32, 1.4, TS[G.A], 0); T('0:' + String(s).padStart(2, '0'), 302, 32, 2, s <= 10 && clock % .5 < .25 ? '#f55' : CH, 1);
     T(G.I ? "PA'L TECHO" : 'JONRONES', 26, 60, 1.6, DIM, 0); T(G.e, 302, 60, 2.2, CH, 1);
-    T(G.I ? 'MÁS LEJOS' : 'MÁS LARGO', 26, 88, 1.4, DIM, 0); T(G.S ? G.S + (G.I ? ' M' : ' PIES') : '-', 302, 88, 1.6, CH, 1);
+    T('MÁS ' + (G.I ? 'LEJOS' : 'LARGO'), 26, 88, 1.4, DIM, 0); T(G.S ? G.S + (G.I ? ' M' : ' PIES') : '-', 302, 88, 1.6, CH, 1);
     return;
   }
   box(14, 14, 230, 92);
@@ -989,18 +983,18 @@ function hudMsgs() {
     const a = min(1, BAN.t * 3);
     rr(130, 214, 540, 112, 12, 0x04050c, .88 * a);
     TB(BAN.a, 400, 252, 2, BAN.Al, a);
-    T(BAN.b, 400, 300, 1.8, CH, .5, 0, a);
+    T(BAN.b, 400, 300, 1.8, CH, .5, a);
   } else if (MSG && MSG.t > 0) {
     const a = min(1, MSG.t * 4), y = G.st === 'p' ? 250 : 292;
     TB(MSG.a, 400, y, MSG.a.length > 14 ? 1.7 : 2.5, MSG.Al, a);
-    if (MSG.b) T(MSG.b, 400, y + 46, 2.2, CH, .5, 0, a);
+    if (MSG.b) T(MSG.b, 400, y + 46, 2.2, CH, .5, a);
   }
 }
 
 // ---------- drawing: field view ----------
 const bpos = s => { const i = min(3, floor(s)), f = s - i, a = BP[i % 4], b = BP[(i + 1) % 4]; return { x: lerp(a.x, b.x, f), y: lerp(a.y, b.y, f) }; };
 function ballXYZ() {
-  if (Y.K === 'a' || Y.K === 'g') { const p = Y.H[min(Y.H.length - 1, floor(Y.t / DT))]; return { x: p[0], y: p[1], z: p[2] }; }
+  if ('ag'.includes(Y.K)) { const p = Y.H[min(Y.H.length - 1, floor(Y.t / DT))]; return { x: p[0], y: p[1], z: p[2] }; }
   if (Y.K === 't' && Y.t >= Y.th.t0) { const th = Y.th, k = seg(Y.t, th.t0, th.t0 + th.du), d = hyp(th.x1 - th.x0, th.y1 - th.y0); return { x: lerp(th.x0, th.x1, k), y: lerp(th.y0, th.y1, k), z: 5 + d * .06 * 4 * k * (1 - k) }; }
   if (Y.K === 't') return { x: Y.th.x0, y: Y.th.y0, z: 5 };
   if (Y.K === 'dead') return { x: CUT.x, y: CUT.y, z: 5 };
@@ -1023,9 +1017,9 @@ function drawField() {
   }
   g = gh;
   board(); const B = [0, 0, 0, 0]; for (const r of Y.R) if (live(r) && r.s === r.C && r.s >= 1 && r.s <= 3) B[r.s] = 1; basesHud(B);
-  if ((Y.K === 'a' || Y.K === 'g') && Y.la > 14 && (!Y.G || Y.hr) && Y.t > .3) {
+  if (('ag'.includes(Y.K)) && Y.la > 14 && (!Y.G || Y.hr) && Y.t > .3) {
     const b = ballXYZ(), d = round(hyp(b.x, b.y));
-    box(560, 528, 226, 60); T('DISTANCIA', 673, 545, 1.4, DIM); T(d + ' PIES', 673, 569, 2.6, CH);
+    dist(d + ' PIES');
   }
   if (Y.Aw && Y.K === 'a' && !Y.hd && !Y.G && G.st === 'y' && Y.t > .5) {
     const full = '¡SE VA, SE VA, SE VA...', n = max(1, floor(full.length * seg(Y.t, .5, 2.6)));
@@ -1044,14 +1038,12 @@ function drawField() {
 }
 // ---------- title / attract ----------
 function title(dt) {
-  bgI.setTexture('fld');
-  g = gw; rc(0, 0, W, H, 0x000000, .5);
-  G.it += dt;
+  scr('fld', .5, dt);
   const t = clock;
-  for (const [o, c] of [[10, US[1]], [0, US[0]]]) T('¡SE FUE!', 400 + o, 120 + o + sin(t * 2) * 4, 3, c, .5, 0, 1, 3 - o / 99, 36);
+  for (const [o, c] of [[10, US[1]], [0, US[0]]]) T('¡SE FUE!', 400 + o, 120 + o + sin(t * 2) * 4, 3, c, .5, 1, 3 - o / 99, 36);
   TD('BÉISBOL ARCADE · CARACAS', 400, 190, 2, CH);
-  if (any('P1_U', 'P2_U')) { G.Ad = (G.Ad + 2) % 3; G.it = 0; sfx.mv(); }
-  if (any('P1_D', 'P2_D')) { G.Ad = (G.Ad + 1) % 3; G.it = 0; sfx.mv(); }
+  const m = any('P1_D', 'P2_D') - any('P1_U', 'P2_U');
+  if (m) { G.Ad = (G.Ad + m + 3) % 3; sfx.mv(); }
   g = gh;
   ['PARTIDO · 4 INNINGS', 'DERBY · 60 SEGUNDOS', 'CHAPITA · 60 SEGUNDOS'].forEach((s, i) => {
     const on = G.Ad === i, y = 230 + i * 38;
@@ -1066,20 +1058,18 @@ function title(dt) {
   }
   if (dby) {
     box(40, 440, 720, 112, 0xffffff);
-    T(G.Ad > 1 ? 'RÉCORDS DEL BARRIO' : 'RÉCORDS DEL DERBY', 400, 458, 1.6, US[0]);
+    T('RÉCORDS DEL ' + (G.Ad > 1 ? 'BARRIO' : 'DERBY'), 400, 458, 1.6, US[0]);
     if (!LB.length) T('¡SÉ EL PRIMERO EN JUGAR!', 400, 500, 1.4, CH);
     LB.forEach((e, i) => { const x = 70 + (i % 3) * 230, y = 486 + (i / 3 | 0) * 30; T((i + 1) + '. ' + e.n + '  ' + e.h + (G.Ad > 1 ? ' TECHO · ' : ' HR · ') + e.d, x, y, 1.4, i ? CH : US[0], 0); });
   }
   const go = p => { sfx.sel(); const m = G.Ad; G = m > 1 ? { st: 'q', Ad: m, pl: p, c: 0, it: 0 } : m ? { st: 'u', Ad: m, pl: p, ci: 0, nm: (CU.n + '      ').slice(0, 6).split(''), it: 0 } : { st: 'k', Ad: m, np: p + 1, c: [0, 1], ok: [0, 0], it: 0 }; };
-  if (any('START1', 'P1_1')) go(0);
-  else if (any('START2', 'P2_1')) go(1);
+  if (go1(0)) go(0);
+  else if (go1(1)) go(1);
 }
 function overScreen(dt) {
-  G.ot += dt;
-  bgI.setTexture('fld');
-  g = gw; rc(0, 0, W, H, 0x000000, .55);
+  scr('fld', .55, dt);
   const w = G.Cd, human = G.J[w];
-  T((human ? '¡' : '') + 'GANAN ' + TL[w] + ' ' + TN[w] + (human ? '!' : ''), 400, 104, 1.5, TS[w], .5, 0, 1, 3, 28);
+  T((human ? '¡' : '') + 'GANAN ' + TL[w] + ' ' + TN[w] + (human ? '!' : ''), 400, 104, 1.5, TS[w], .5, 1, 3, 28);
   TB(G.E[0] + ' - ' + G.E[1], 400, 176, 1.8, CH); g = gh; emblem(TI[0], 280, 176, .9); emblem(TI[1], 520, 176, .9);
   g = gh;
   const n = max(G.N, G.X), cw = min(40, 420 / n), x0 = 400 - (96 + n * cw + 3 * 44) / 2;
@@ -1090,31 +1080,28 @@ function overScreen(dt) {
     const y = 286 + tm * 36;
     emblem(TI[tm], x0 + 14, y, .45); T(TA[tm], x0 + 34, y, 1.6, TS[tm], 0);
     for (let i = 0; i < n; i++) { const v = G.g[tm][i]; T(v === undefined ? (tm && i === n - 1 ? 'X' : '-') : v, x0 + 96 + i * cw + cw / 2, y, 1.8, CH); }
-    [G.E[tm], G.Aa[tm], G.Ab[tm]].forEach((v, i) => T(v, x0 + 96 + n * cw + 22 + i * 44, y, 2, CH));
+    [G.E[tm], G.Aa[tm], 0].forEach((v, i) => T(v, x0 + 96 + n * cw + 22 + i * 44, y, 2, CH));
   }
-  if (G.ot > 2 && clock % 1 < .7) TD('PRESIONA START', 400, 470, 2.4, CH);
-  if ((G.ot > 2 && any('START1', 'START2', 'P1_1', 'P2_1')) || G.ot > 60) toTitle();
+  if (G.it > 2 && clock % 1 < .7) TD('PRESIONA START', 400, 470, 2.4, CH);
+  if ((G.it > 2 && (go1(0) || go1(1))) || G.it > 60) toTitle();
 }
 
 // ---------- derby end + initials ----------
-function lbAdd(n) { const k = G.I ? 1 : 0, e = { n, h: G.e, d: G.S }; LBS[k] = lbSort([...LBS[k], e]); G.me = e; G.Ah = 1; G.ot = 0; saveLB(k); }
+function lbAdd(n) { const k = G.I ? 1 : 0, e = { n, h: G.e, d: G.S }; LBS[k] = lbSort([...LBS[k], e]); G.me = e; G.Ah = 1; G.it = 0; saveLB(k); }
 function toDerbyEnd() {
   const L = LBS[G.I ? 1 : 0];
-  G.st = 'd'; G.ot = 0; MSG = BAN = null; amb(0);
+  G.st = 'd'; G.it = 0; MSG = BAN = null; amb(0);
   G.q = G.e > 0 && (L.length < 5 || G.e > L[4].h || (G.e === L[4].h && G.S > L[4].d));
   G.Ao = [0, 0, 0]; G.ip = 0; G.Ah = 0;
   if (G.q && !G.I) lbAdd(CU.n);
-  sfx.charge(); if (G.e) sfx.cheer(2);
-  for (let i = 0; i < min(8, G.e + 2); i++) burst(rnd(150, 650), rnd(80, 200), TC[G.A], i * .25);
+  party(min(8, G.e + 2), TC[G.A]); if (G.e) sfx.cheer(2);
 }
 function derbyEnd(dt) {
-  G.ot += dt;
   const pl = G.A, ch = G.I, L = LBS[ch ? 1 : 0];
-  bgI.setTexture(ch ? 'chp' : 'fld');
-  g = gw; rc(0, 0, W, H, 0x000000, .6);
+  scr(ch ? 'chp' : 'fld', .6, dt);
   TB(ch ? 'FIN DE LA CHAPITA' : 'FIN DEL DERBY', 400, 86, 2, TS[pl]);
   TB(G.e + (ch ? " ¡PA'L TECHO!" : G.e === 1 ? ' JONRÓN' : ' JONRONES'), 400, 150, 1.8, CH);
-  T((ch ? 'MÁS LEJOS: ' : 'MÁS LARGO: ') + (G.S ? G.S + (ch ? ' M' : ' PIES') : '-'), 400, 196, 2, DIM);
+  T('MÁS ' + (ch ? 'LEJOS: ' : 'LARGO: ') + (G.S ? G.S + (ch ? ' M' : ' PIES') : '-'), 400, 196, 2, DIM);
   g = gh;
   if (G.q && !G.Ah) {
     TD('¡NUEVO RÉCORD! TUS INICIALES', 400, 260, 1.8, TS[pl]);
@@ -1123,18 +1110,18 @@ function derbyEnd(dt) {
     for (let i = 0; i < 3; i++) {
       const x = 340 + i * 60, on = i === G.ip;
       rr(x - 24, 290, 48, 60, 8, on ? TC[pl] : 0x04050c, on ? 1 : .86);
-      T(String.fromCharCode(65 + G.Ao[i]), x, 320, 2.2, on ? '#110' : CH, .5, 0, 1, 3, 24);
+      T(String.fromCharCode(65 + G.Ao[i]), x, 320, 2.2, on ? '#110' : CH, .5, 1, 3, 24);
     }
-    T('JOYSTICK: LETRA · 1: SIGUIENTE', 400, 378, 1.4, DIM);
+    T(JS + 'LETRA · 1: SIGUIENTE', 400, 378, 1.4, DIM);
     if (pr(pl, '1') || pr(pl, '2')) { sfx.sel(); if (G.ip < 2) G.ip++; else lbAdd(G.Ao.map(c => String.fromCharCode(65 + c)).join('')); }
     return;
   }
   box(200, 250, 400, 190, 0xffffff);
-  T(ch ? 'RÉCORDS DEL BARRIO' : 'RÉCORDS DEL DERBY', 400, 272, 1.6, US[0]);
+  T('RÉCORDS DEL ' + (ch ? 'BARRIO' : 'DERBY'), 400, 272, 1.6, US[0]);
   L.forEach((e, i) => T((i + 1) + '.  ' + e.n + '   ' + e.h + (ch ? ' TECHO   ' + e.d + ' M' : ' HR   ' + e.d + ' PIES'), 226, 304 + i * 28, 1.5, e === G.me ? TS[pl] : CH, 0));
   if (!L.length) T('SIN RÉCORDS · ¡OTRA VEZ!', 400, 340, 1.6, CH);
-  if (G.ot > 1.5 && clock % 1 < .7) TD('PRESIONA START', 400, 490, 2.2, CH);
-  if ((G.ot > 1.5 && any('START1', 'START2', 'P1_1', 'P2_1')) || G.ot > 30) toTitle();
+  if (G.it > 1.5 && clock % 1 < .7) TD('PRESIONA START', 400, 490, 2.2, CH);
+  if ((G.it > 1.5 && (go1(0) || go1(1))) || G.it > 30) toTitle();
 }
 
 // ---------- team pick ----------
@@ -1156,25 +1143,23 @@ function emblem(i, x, y, s) {
   g.restore();
 }
 function pickScreen(dt) {
-  bgI.setTexture('fld');
-  g = gw; rc(0, 0, W, H, 0x000000, .65);
-  G.it += dt;
+  scr('fld', .65, dt);
   TB('ELIGE TU EQUIPO', 400, 40, 1.5, US[0]);
   const who = G.np === 2 ? [0, 1] : [0];
   for (const p of who) if (!G.ok[p]) {
-    const ax = (pr(p, 'R') ? 1 : 0) - (pr(p, 'L') ? 1 : 0);
+    const ax = (pr(p, 'R') | 0) - (pr(p, 'L') | 0);
     if (ax) { G.c[p] = (G.c[p] + ax + 4) % 4; sfx.mv(); }
-    if ((pr(p, '1') || hit[p ? 'START2' : 'START1']) && !(G.ok[1 - p] && G.c[1 - p] === G.c[p])) { G.ok[p] = 1; sfx.sel(); }
+    if (go1(p) && !(G.ok[1 - p] && G.c[1 - p] === G.c[p])) { G.ok[p] = 1; sfx.sel(); }
   }
   g = gh;
   TEAM.forEach((t, i) => {
     const x = 110 + i * 193, y = 290, on = who.some(p => G.c[p] === i);
     box(x - 88, y - 96, 176, 184, on ? t[3] : 0x444444);
     emblem(i, x, y - 18, 1.6);
-    T(t[0], x, y + 66, 1.5, t[4], .5, 0, on ? 1 : .6);
-    who.forEach(p => { if (G.c[p] === i) { LS(4, UC[p], 1); g.strokeRoundedRect(x - 92 + p * 4, y - 100 + p * 4, 184 - p * 8, 192 - p * 8, 10); T('P' + (p + 1) + (G.ok[p] ? ' OK' : ''), x + (p ? 80 : -80), y - 82, 1.4, US[p], p, '#000'); } });
+    T(t[0], x, y + 66, 1.5, t[4], .5, on ? 1 : .6);
+    who.forEach(p => { if (G.c[p] === i) { LS(4, UC[p], 1); g.strokeRoundedRect(x - 92 + p * 4, y - 100 + p * 4, 184 - p * 8, 192 - p * 8, 10); T('P' + (p + 1) + (G.ok[p] ? ' OK' : ''), x + (p ? 80 : -80), y - 82, 1.4, US[p], p); } });
   });
-  TD('JOYSTICK: ELIGE  ·  1: CONFIRMA', 400, 576, 1.5, CH);
+  TD(JS + 'ELIGE  ·  1: CONFIRMA', 400, 576, 1.5, CH);
   if (who.every(p => G.ok[p])) {
     const a = G.c[who[0]];
     setTeams(a, G.np === 2 ? G.c[1] : other(a)); newGame(G.np);
@@ -1184,10 +1169,8 @@ function pickScreen(dt) {
 // ---------- O: customize your batter ----------
 const ABC = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 function custScreen(dt) {
-  const p = G.pl, nm = G.nm, d = (pr(p, 'U') ? 1 : 0) - (pr(p, 'D') ? 1 : 0);
-  bgI.setTexture('pit');
-  g = gw; rc(0, 0, W, H, 0x000000, .5);
-  G.it += dt;
+  const p = G.pl, nm = G.nm, d = (pr(p, 'U') | 0) - (pr(p, 'D') | 0);
+  scr('pit', .5, dt);
   if (d) { sfx.mv(); nm[G.ci] = ABC[(ABC.indexOf(nm[G.ci]) + d + 27) % 27]; }
   if (pr(p, 'R') || pr(p, 'L')) { G.ci = (G.ci + (pr(p, 'R') ? 1 : 5)) % 6; sfx.mv(); }
   CU.n = nm.join('').trim() || 'P' + (p + 1);
@@ -1196,17 +1179,15 @@ function custScreen(dt) {
   TB('¿QUIÉN BATEA?', 400, 36, 1.3, US[p]);
   box(420, 230, 300, 90, UC[p]); T('TU NOMBRE', 436, 250, 1.2, US[p], 0);
   nm.forEach((c, j) => { const h = j === G.ci; rr(436 + j * 46, 266, 40, 40, 4, h ? UC[p] : 0x1b1d2e); T(c === ' ' ? '_' : c, 456 + j * 46, 286, 1.8, h ? '#110' : CH); });
-  TD('JOYSTICK: LETRA · 1: ¡A JUGAR!', 400, 580, 1.1, CH);
-  if (pr(p, '1') || hit[p ? 'START2' : 'START1']) { sfx.sel(); newDerby(p); }
+  TD(JS + 'LETRA · 1: ¡A JUGAR!', 400, 580, 1.1, CH);
+  if (go1(p)) { sfx.sel(); newDerby(p); }
   else if (G.it > 60) toTitle();
 }
 
 // ---------- chapita: pick your kid ----------
 function cpick(dt) {
   const p = G.pl;
-  bgI.setTexture('chp');
-  g = gw; rc(0, 0, W, H, 0x000000, .45);
-  G.it += dt;
+  scr('chp', .45, dt);
   if (pr(p, 'L') || pr(p, 'R')) { G.c = (G.c + (pr(p, 'R') ? 1 : 3)) % 4; sfx.mv(); }
   TB('¿QUIÉN BATEA?', 400, 30, 1.8, '#fd1');
   CHR.forEach((c, i) => {
@@ -1214,22 +1195,21 @@ function cpick(dt) {
     g = gh; box(x - 92, 62, 184, 476, on ? UC[p] : 0x444444);
     batter(-1, lkOf(c), x, 446, 2.5); g = gh;
     T(c[0], x, 464, 1.6, on ? US[p] : CH);
-    ['PODER', 'PUNTERÍA'].forEach((s, j) => { T(s, x - 86, 492 + j * 22, 1, DIM, 0); for (let k = 0; k < 4; k++) rc(x + 36 + k * 13, 487 + j * 22, 10, 10, k < c[9 + j] ? UC[p] : 0x3a3d2a); });
+    ['PODER', 'PUNTERÍA'].forEach((s, j) => { T(s, x - 86, 492 + j * 22, 1, DIM, 0); for (let k = 0; k < 4; k++) rc(x + 36 + k * 13, 487 + j * 22, 10, 10, k < c[8 + j] ? UC[p] : 0x3a3d2a); });
   });
-  TD('JOYSTICK: ELIGE · 1: ¡A BATEAR!', 400, 572, 1.5, CH);
-  if (pr(p, '1') || hit[p ? 'START2' : 'START1']) { sfx.sel(); newChap(p, CHR[G.c]); }
+  TD(JS + 'ELIGE · 1: ¡A BATEAR!', 400, 572, 1.5, CH);
+  if (go1(p)) { sfx.sel(); newChap(p, CHR[G.c]); }
   else if (G.it > 40) toTitle();
 }
 function newChap(p, c) {
-  G = { st: 'p', O: 1, I: 1, ck: c, lk: lkOf(c), Ad: 2, N: 1, X: 1, A: p, B: 0, b: 0, s: 0, D: [0, 0, 0, 0], E: [0, 0], g: [[], []], Aa: [0, 0], Ab: [0, 0], J: p ? [0, 1] : [1, 0], o: 0, ln: [0, 0], W: 0, it: 0, dl: 60, e: 0, S: 0 };
+  mkG({ O: 1, I: 1, ck: c, lk: lkOf(c), Ad: 2, A: p, J: p ? [0, 1] : [1, 0] });
   setTeams(0, 1); TC[p] = 0xffd60a; TS[p] = '#fd1'; TC[1 - p] = 0xff922b;
-  lastInput = clock; amb(1);
   BAN = { a: 'CHAPITA', b: "60 SEGUNDOS · ¡MÁNDALA PA'L TECHO!", Al: '#fd1', t: 2.2 };
   newPitch(2.2);
 }
 function capG(x, y, r) { const f = .3 + .7 * abs(sin(clock * 22)); el(x, y, r + 1, r * f + 1, 0x5a0f0f, .6); el(x, y, r, r * f, 0xe03131); el(x, y, r * .6, r * .6 * f, 0xff8787); }
 function chapHit(ev, la, sp) {
-  const v = ev * .17 * (.82 + G.ck[9] * .06), c = cos(la);
+  const v = ev * .17 * (.82 + G.ck[8] * .06), c = cos(la);
   Object.assign(P, { ph: 'c', t: -.06, cf: { d: 0, x: 0, h: 1, vd: v * c * cos(sp), vx: v * c * sin(sp), vh: v * sin(la), r: 0 } });
 }
 function stepChap(dt) {
